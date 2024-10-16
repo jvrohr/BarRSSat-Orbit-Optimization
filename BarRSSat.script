@@ -8,7 +8,7 @@
 
 Create Spacecraft DefaultSC;
 GMAT DefaultSC.DateFormat = UTCGregorian;
-GMAT DefaultSC.Epoch = '2 Aug 2026 12:00:00.000';
+GMAT DefaultSC.Epoch = '2 Aug 2026 00:00:00.000';
 GMAT DefaultSC.CoordinateSystem = EarthICRF;
 GMAT DefaultSC.DisplayStateType = Keplerian;
 GMAT DefaultSC.SMA = $SMA$;
@@ -238,24 +238,6 @@ GMAT ContactLocator1.ReportTimeFormat = 'UTCGregorian';
 %----------------------------------------
 %---------- Subscribers
 %----------------------------------------
-
-Create ReportFile ReportFile1;
-GMAT ReportFile1.SolverIterations = Current;
-GMAT ReportFile1.UpperLeft = [ 0.04450261780104712 0.09659090909090909 ];
-GMAT ReportFile1.Size = [ 0.5986038394415357 0.7954545454545454 ];
-GMAT ReportFile1.RelativeZOrder = 171;
-GMAT ReportFile1.Maximized = true;
-GMAT ReportFile1.Filename = 'ReportFile1.txt';
-GMAT ReportFile1.Precision = 16;
-GMAT ReportFile1.Add = {DefaultSC.A1ModJulian, DefaultSC.EarthMJ2000Eq.X, DefaultSC.Earth.OrbitPeriod};
-GMAT ReportFile1.WriteHeaders = true;
-GMAT ReportFile1.LeftJustify = On;
-GMAT ReportFile1.ZeroFill = Off;
-GMAT ReportFile1.FixedWidth = true;
-GMAT ReportFile1.Delimiter = ' ';
-GMAT ReportFile1.ColumnWidth = 23;
-GMAT ReportFile1.WriteReport = true;
-
 
 %----------------------------------------
 %---------- Mission Sequence

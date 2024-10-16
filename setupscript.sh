@@ -8,23 +8,23 @@ GMAT_DIR=${CURRENT_DIR}"/GMAT/R2022a"
 GMAT_API_DIR=${GMAT_DIR}"/api"
 GMAT_BIN_DIR=${GMAT_DIR}"/bin"
 
-# # Download the tar.gz file
-# echo "[INFO] Downloading $URL..."
-# wget $URL -O ${FILE_NAME}
+# Download the tar.gz file
+echo "[INFO] Downloading $URL..."
+wget $URL -O ${FILE_NAME}
 
-# # Check if the file was downloaded successfully
-# if [ $? -ne 0 ]; then
-#   echo "[INFO] Failed to download the file. Exiting."
-#   exit 1
-# fi
+# Check if the file was downloaded successfully
+if [ $? -ne 0 ]; then
+  echo "[INFO] Failed to download the file. Exiting."
+  exit 1
+fi
 
-# # Extract the tar.gz file
-# echo "[INFO] Extracting ${FILE_NAME}..."
-# tar -xzf ${FILE_NAME}
+# Extract the tar.gz file
+echo "[INFO] Extracting ${FILE_NAME}..."
+tar -xzf ${FILE_NAME}
 
-# # Clean up the tar.gz file
-# echo "[INFO] Cleaning up..."
-# rm ${FILE_NAME}
+# Clean up the tar.gz file
+echo "[INFO] Cleaning up..."
+rm ${FILE_NAME}
 
 echo "[INFO] Exporting environment bin dir variable"
 export PYTHONPATH=$PYTHONPATH:${GMAT_BIN_DIR}
