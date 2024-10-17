@@ -3,7 +3,6 @@
 from typing import *
 from load_gmat import *
 import os, sys, argparse
-from datetime import datetime
 
 ## Argument parser
 parser = argparse.ArgumentParser(description="Python Script to run GMAT orbit simulations varying orbital elements for the BarRSSat mission, by substitution of variables in a GMAT script file.")
@@ -56,9 +55,6 @@ class Simulate:
             print("[INFO] Script run NOT OK")
         if not args.keepScript:
             os.remove(self.resultScriptPath)
-
-    def ConvertDatetime(self, stringDate):
-        return datetime.strptime(stringDate, "%d %b %Y %H:%M:%S.%f")
 
 
 configurationDict = {

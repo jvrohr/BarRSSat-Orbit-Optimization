@@ -3,6 +3,10 @@ from load_gmat import *
 import os, sys
 import numpy as np
 import scipy.optimize as opt
+from datetime import datetime
+
+## Arguments parsing
+ElapsedDays = 7
 
 # Get the directory of the currently executing script
 currentDir = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -60,19 +64,41 @@ class Optimize:
 
     def PrintCurrentStatus(self, x, average):
         print(f"[INFO] e = {x[0]}, w = {x[1]}, average = {average}")
-        
-    def ObjectiveFunction(self, x):
+
+    def RunGMAT(self, x):
         os.system(f'./rungmat.py --ECC {x[0]} --AOP {x[1]}')
 
         self.contactDict = self.ProcessFile(GMATPATH + "/output/" + 
                                             "BarRSSatOUTPUT.txt")
         self.CleanFiles(GMATPATH + "/output/")
 
+    def ObjectiveFunction(self, x):
+        ## Constraint gets ran first, so the contactDict gets set there and used here
+        print("HERE")
+
         average = self.CalculateAverage(self.contactDict)
         average = -average if not np.isnan(average) else 0
         self.PrintCurrentStatus(x, -average)
 
         return average
+    
+    def ConvertDatetime(self, stringDate):
+        return datetime.strptime(stringDate, "%d %b %Y %H:%M:%S.%f")
 
-    def Optimize(self, initialValues: List[float], bounds: Tuple[Tuple[float]]):
-        result = opt.differential_evolution(self.ObjectiveFunction, bounds=bounds, disp=True, popsize=10)
+    def EverydayConstraint(self, x):
+        self.RunGMAT(x)
+        print(f"[INFO] e = {x[0]}, w = {x[1]}")
+
+        for station in self.contactDict.keys():
+            listDatetimeContacts = list(self.contactDict[station].keys())
+            listDayContacts = [self.ConvertDatetime(strDate).day for strDate in listDatetimeContacts]
+            numberDays = len(set(listDayContacts))
+            if numberDays != ElapsedDays:
+                print("[INFO] Contact NOT detected everyday")
+                return ElapsedDays - numberDays
+        print("[INFO] Contact detected everyday")
+        return 0
+
+    def Optimize(self, bounds: Tuple[Tuple[float]]):
+        constraint = opt.NonlinearConstraint(self.EverydayConstraint, 0, 0, keep_feasible=True)
+        result = opt.differential_evolution(self.ObjectiveFunction, bounds=bounds, constraints=[constraint], disp=True, polish=False, popsize=10)
