@@ -1,18 +1,40 @@
 from typing import *
 from load_gmat import *
-import os, sys
+import os, sys, argparse
 import numpy as np
 import scipy.optimize as opt
 from datetime import datetime
 
-## Arguments parsing
-ElapsedDays = 7
+## Argument parser
+parser = argparse.ArgumentParser(description="Python Script to run optimization of the BarRSSat orbit.")
+
+parser.add_argument('--SMA', type=float, default=7000, help='Semi-major axis [km].')
+parser.add_argument('--ECC', type=float, default=0.0, help='Excentricity [-].')
+parser.add_argument('--INC', type=float, default=45.0, help='Inclination [degrees].')
+parser.add_argument('--RAAN', type=float, default=0.0, help='Right Ascension of the Ascending Node [degrees].')
+parser.add_argument('--AOP', type=float, default=0.0, help='Argument of Periapsis [degrees].')
+parser.add_argument('--DragArea', type=float, default=0.01, help='Transversal area for drag model [m^2].')
+parser.add_argument('--SRPArea', type=float, default=0.01, help='Transversal area for Solar Radiation Pressure model [m^2].')
+parser.add_argument('--Cd', type=float, default=2.0, help='Drag coefficient [-].')
+parser.add_argument('--DryMass', type=float, default=3.3, help='Dry mass [kg].')
+parser.add_argument('--Cr', type=float, default=1.75, help='Reflectivity coefficient [-].')
+parser.add_argument('--ElapsedDays', type=float, default=7, help='Number of days to conduct simulation [days].')
+
+parser.add_argument('--sourceScript', type=str, default="BarRSSat.script", help='Source Script used to substitute orbital elements arguments in.')
+parser.add_argument('--outputFilename', type=str, default="BarRSSatOUTPUT.txt", help='Name of the temporary output file name for the gmat contact locator report.')
+parser.add_argument('--keepScript', action='store_true', help='Wether or not to keep the generated SCRIPT file after the run.')
+
+args = parser.parse_args()
 
 # Get the directory of the currently executing script
 currentDir = os.path.dirname(os.path.abspath(sys.argv[0]))
 GMATPATH = new_path = os.path.join(currentDir, 'GMAT', 'R2022a')
 
 class Optimize:
+    def __init__(self, optimizationVariables, optimizationRanges):
+        self.optimizationVariables = optimizationVariables
+        self.optimizationRanges =optimizationRanges
+        self.simulationResults = {}
     # Method to process the text file
     def ProcessFile(self, filePath):
         resultDict = {}
@@ -62,23 +84,39 @@ class Optimize:
         else:
             print("Directory does not exist")
 
-    def PrintCurrentStatus(self, x, average):
-        print(f"[INFO] e = {x[0]}, w = {x[1]}, average = {average}")
+    def PrintCurrentStatus(self, x):
+        string = f"[INFO] "
+        for i, var in enumerate(self.optimizationVariables):
+            string = string + var + f" = {x[i]} "
+        print(string)
 
     def RunGMAT(self, x):
-        os.system(f'./rungmat.py --ECC {x[0]} --AOP {x[1]}')
+        ## Running GMAT with terminal command
+        cmdString = f'./rungmat.py'
+        for i, var in enumerate(self.optimizationVariables):
+            cmdString = cmdString + f" --{var} {x[i]}"
+        os.system(cmdString)
 
+        ## Get contact duration dictionary
         self.contactDict = self.ProcessFile(GMATPATH + "/output/" + 
                                             "BarRSSatOUTPUT.txt")
         self.CleanFiles(GMATPATH + "/output/")
 
+        ## Calculate average and store result for combination of variables
+        average = self.CalculateAverage(self.contactDict)
+        self.simulationResults[str(x)] = {"average": average}
+
     def ObjectiveFunction(self, x):
         ## Constraint gets ran first, so the contactDict gets set there and used here
-        print("HERE")
+        print("[INFO] Objective Function")
+        self.PrintCurrentStatus()
+        try:
+            average = self.simulationResults[str(x)]["average"]
+        except:
+            self.RunGMAT(x)
 
-        average = self.CalculateAverage(self.contactDict)
+        print(f"[INFO] Average = {average}")
         average = -average if not np.isnan(average) else 0
-        self.PrintCurrentStatus(x, -average)
 
         return average
     
@@ -86,21 +124,27 @@ class Optimize:
         return datetime.strptime(stringDate, "%d %b %Y %H:%M:%S.%f")
 
     def EverydayConstraint(self, x):
+        print("[INFO] Running Constraint Function")
+        self.PrintCurrentStatus(x)
         self.RunGMAT(x)
-        print(f"[INFO] e = {x[0]}, w = {x[1]}")
 
         for station in self.contactDict.keys():
             listDatetimeContacts = list(self.contactDict[station].keys())
             listDayContacts = [self.ConvertDatetime(strDate).day for strDate in listDatetimeContacts]
             numberDays = len(set(listDayContacts))
-            if numberDays != ElapsedDays:
+            
+            if numberDays != args.ElapsedDays:
                 print("[INFO] Contact NOT detected everyday")
-                return ElapsedDays - numberDays
+                self.simulationResults[str(x)]["constraintMet"] = False
+                return args.ElapsedDays - numberDays
+        
         print("[INFO] Contact detected everyday")
+        self.simulationResults[str(x)]["constraintMet"] = True
+
         return 0
 
-    def Optimize(self, bounds: Tuple[Tuple[float]]):
-        constraint = opt.NonlinearConstraint(self.EverydayConstraint, 0, 0, keep_feasible=True)
-        result = opt.differential_evolution(self.ObjectiveFunction, bounds=bounds, constraints=[constraint], disp=True, polish=False, popsize=10)
+    def Optimize(self):
+        constraint = opt.NonlinearConstraint(self.EverydayConstraint, 0, 0)
+        result = opt.differential_evolution(self.ObjectiveFunction, bounds=self.optimizationRanges, constraints=[constraint], disp=True, polish=False, popsize=10)
         if result.success:
             print("The converged solution is: " + str(result.x))
