@@ -102,3 +102,5 @@ class Optimize:
     def Optimize(self, bounds: Tuple[Tuple[float]]):
         constraint = opt.NonlinearConstraint(self.EverydayConstraint, 0, 0, keep_feasible=True)
         result = opt.differential_evolution(self.ObjectiveFunction, bounds=bounds, constraints=[constraint], disp=True, polish=False, popsize=10)
+        if result.success:
+            print("The converged solution is: " + str(result.x))
