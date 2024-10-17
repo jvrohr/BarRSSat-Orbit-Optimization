@@ -59,10 +59,10 @@ class Optimize:
             print("Directory does not exist")
 
     def PrintCurrentStatus(self, x, average):
-        print(f"[INFO] a = {x[0]}, i = {x[1]}, RAAN = {x[2]}, average = {average}")
+        print(f"[INFO] e = {x[0]}, w = {x[1]}, average = {average}")
         
     def ObjectiveFunction(self, x):
-        os.system(f'./rungmat.py {x[0]} {x[1]} {x[2]}')
+        os.system(f'./rungmat.py --ECC {x[0]} --AOP {x[1]}')
 
         self.contactDict = self.ProcessFile(GMATPATH + "/output/" + 
                                             "BarRSSatOUTPUT.txt")
@@ -70,7 +70,7 @@ class Optimize:
 
         average = self.CalculateAverage(self.contactDict)
         average = -average if not np.isnan(average) else 0
-        self.PrintCurrentStatus(x, average)
+        self.PrintCurrentStatus(x, -average)
 
         return average
 
