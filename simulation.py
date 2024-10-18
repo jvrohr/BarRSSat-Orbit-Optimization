@@ -122,7 +122,7 @@ class Optimize:
 
         ## Constraint gets ran first, so the contactDict gets set there and used here
         print("[INFO] Objective Function")
-        self.PrintCurrentStatus()
+        self.PrintCurrentStatus(x)
         try:
             output = self.simulationResults[str(x)][outputVariable]
         except:
