@@ -1,29 +1,12 @@
 from typing import *
 from load_gmat import *
-import os, sys, argparse
+import os, sys, json, arguments
 import numpy as np
 import scipy.optimize as opt
 from datetime import datetime
 
 ## Argument parser
-parser = argparse.ArgumentParser(description="Python Script to run optimization of the BarRSSat orbit.")
-
-parser.add_argument('--SMA', type=float, default=7000, help='Semi-major axis [km].')
-parser.add_argument('--ECC', type=float, default=0.0, help='Excentricity [-].')
-parser.add_argument('--INC', type=float, default=45.0, help='Inclination [degrees].')
-parser.add_argument('--RAAN', type=float, default=0.0, help='Right Ascension of the Ascending Node [degrees].')
-parser.add_argument('--AOP', type=float, default=0.0, help='Argument of Periapsis [degrees].')
-parser.add_argument('--DragArea', type=float, default=0.01, help='Transversal area for drag model [m^2].')
-parser.add_argument('--SRPArea', type=float, default=0.01, help='Transversal area for Solar Radiation Pressure model [m^2].')
-parser.add_argument('--Cd', type=float, default=2.0, help='Drag coefficient [-].')
-parser.add_argument('--DryMass', type=float, default=3.3, help='Dry mass [kg].')
-parser.add_argument('--Cr', type=float, default=1.75, help='Reflectivity coefficient [-].')
-parser.add_argument('--ElapsedDays', type=float, default=7, help='Number of days to conduct simulation [days].')
-
-parser.add_argument('--sourceScript', type=str, default="BarRSSat.script", help='Source Script used to substitute orbital elements arguments in.')
-parser.add_argument('--outputFilename', type=str, default="BarRSSatOUTPUT.txt", help='Name of the temporary output file name for the gmat contact locator report.')
-parser.add_argument('--keepScript', action='store_true', help='Wether or not to keep the generated SCRIPT file after the run.')
-
+parser = arguments.CreateParser(description="Python Script to run optimization of the BarRSSat orbit.")
 args = parser.parse_args()
 
 # Get the directory of the currently executing script
@@ -33,8 +16,9 @@ GMATPATH = new_path = os.path.join(currentDir, 'GMAT', 'R2022a')
 class Optimize:
     def __init__(self, optimizationVariables, optimizationRanges):
         self.optimizationVariables = optimizationVariables
-        self.optimizationRanges =optimizationRanges
+        self.optimizationRanges = optimizationRanges
         self.simulationResults = {}
+    
     # Method to process the text file
     def ProcessFile(self, filePath):
         resultDict = {}
@@ -60,14 +44,32 @@ class Optimize:
 
         return resultDict
 
-    def CalculateAverage(self, runDict):
+    def CalculateDurationAverage(self, runDict):
         accumulation = []
         for groundStation in runDict.keys():
-            accumulation.append(self.CalculateDictAverage(runDict[groundStation]))
+            listValues = list(runDict[groundStation].values())
+            accumulation.append(np.mean(listValues))
         return np.mean(accumulation)
 
-    def CalculateDictAverage(self, inputDict):
-        return np.mean(list(inputDict.values()))
+    def CalculateDailyAverage(self, runDict):
+        totalResults = []
+        for station in runDict.keys():
+            listDayContacts = [self.ConvertDatetime(strDate).day for strDate in list(runDict[station].keys())]
+            # get only unique values
+            listDayContacts = list(set(listDayContacts))
+
+            index = 0
+            stationResult = [0]
+            for contact in runDict[station].keys():
+                ## if day in runDict is on the current index day, add to result in the right bin 
+                if(self.ConvertDatetime(contact).day == listDayContacts[index]):
+                    stationResult[index] = stationResult[index] + runDict[station][contact]
+                else: ## otherwise append the new index relative to the new day
+                    stationResult.append(0)
+                    index = index + 1
+            
+            totalResults.append(np.mean(stationResult))
+        return np.mean(totalResults)
     
     def CleanFiles(self, path):
         # Check if the directory exists
@@ -95,6 +97,8 @@ class Optimize:
         cmdString = f'./rungmat.py'
         for i, var in enumerate(self.optimizationVariables):
             cmdString = cmdString + f" --{var} {x[i]}"
+        ### add fixed options
+        cmdString = cmdString + f"{' '.join(sys.argv[1:])}"
         os.system(cmdString)
 
         ## Get contact duration dictionary
@@ -103,22 +107,30 @@ class Optimize:
         self.CleanFiles(GMATPATH + "/output/")
 
         ## Calculate average and store result for combination of variables
-        average = self.CalculateAverage(self.contactDict)
-        self.simulationResults[str(x)] = {"average": average}
+        durationAverage = self.CalculateDurationAverage(self.contactDict)
+        dailyAverage = self.CalculateDailyAverage(self.contactDict)
+        self.simulationResults[str(x)] = {
+            "durationAverage": durationAverage,
+            "dailyAverage": dailyAverage
+            }
 
-    def ObjectiveFunction(self, x):
+    def ObjectiveFunction(self, x, *args):
+        if not args:
+            outputVariable = "dailyAverage"
+        else:
+            outputVariable = args[0]
+
         ## Constraint gets ran first, so the contactDict gets set there and used here
         print("[INFO] Objective Function")
         self.PrintCurrentStatus()
         try:
-            average = self.simulationResults[str(x)]["average"]
+            output = self.simulationResults[str(x)][outputVariable]
         except:
             self.RunGMAT(x)
 
-        print(f"[INFO] Average = {average}")
-        average = -average if not np.isnan(average) else 0
+        print(f"[INFO] {outputVariable} = {output}")
 
-        return average
+        return -output if not np.isnan(output) else 0
     
     def ConvertDatetime(self, stringDate):
         return datetime.strptime(stringDate, "%d %b %Y %H:%M:%S.%f")
@@ -148,3 +160,7 @@ class Optimize:
         result = opt.differential_evolution(self.ObjectiveFunction, bounds=self.optimizationRanges, constraints=[constraint], disp=True, polish=False, popsize=10)
         if result.success:
             print("The converged solution is: " + str(result.x))
+        
+        ## Save the simulation results dictionary into a json file
+        with open('simulationResultsDictionary.json', 'w') as file:
+            json.dump(self.simulationResults, file)
