@@ -1,5 +1,4 @@
 from typing import *
-from load_gmat import *
 import os, sys, json, arguments
 import numpy as np
 import scipy.optimize as opt
@@ -11,7 +10,7 @@ args = parser.parse_args()
 
 # Get the directory of the currently executing script
 currentDir = os.path.dirname(os.path.abspath(sys.argv[0]))
-GMATPATH = new_path = os.path.join(currentDir, 'GMAT', 'R2022a')
+GMATPATH = os.path.join(currentDir, 'GMAT', 'R2022a')
 
 class Optimize:
     def __init__(self, optimizationVariables, optimizationRanges):

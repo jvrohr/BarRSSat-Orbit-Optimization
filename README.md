@@ -23,12 +23,12 @@ Basically the default GMAT folder should be placed in this repository root and t
 Example of how to call the optimization function for mean contact duration time for the predefined groundstations. The function uses the ```rungmat.py``` file to run GMAT through the GMAT Python API. A template script (sourceScript) should be made beforehand by the user with the arguments that can be changed (SMA, ECC, etc). Note that the time of passege by the periapsis is not set a range because it does not affect the orbit contact duration for the long run.  
 
 ```
-from simulation import *
+from optimization import *
 
 opt = Optimize()
 
 opt.Optimize(((6871, 6971), # SMA
-        (0, 0.09),          # ECC 
+        (0, 0.007),         # ECC 
         (0, 102),           # INC
         (0, 360),           # RAAN
         (0, 360)))          # AOP
