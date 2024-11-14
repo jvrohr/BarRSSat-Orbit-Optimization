@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/bin/python3.10
 
 from typing import *
 from load_gmat import *

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Variables
 URL="https://sourceforge.net/projects/gmat/files/GMAT/GMAT-R2022a/gmat-ubuntu-x64-R2022a.tar.gz/download"
 FILE_NAME="gmat"
@@ -7,6 +9,14 @@ CURRENT_DIR=$(pwd)
 GMAT_DIR=${CURRENT_DIR}"/GMAT/R2022a"
 GMAT_API_DIR=${GMAT_DIR}"/api"
 GMAT_BIN_DIR=${GMAT_DIR}"/bin"
+
+# Install python3.10
+if python3.10 --version &>/dev/null; then
+  echo "Python already installed, skipping"
+else
+  sudo apt update
+  sudo apt install -y python3.10
+fi
 
 # Download the tar.gz file
 echo "[INFO] Downloading $URL..."
@@ -29,8 +39,6 @@ rm ${FILE_NAME}
 echo "[INFO] Exporting environment bin dir variable"
 export PYTHONPATH=$PYTHONPATH:${GMAT_BIN_DIR}
 
-echo ${GMAT_API_DIR}
-
 pushd $GMAT_API_DIR
 
 # Create the ../bin/api_startup_file.txt with absolute paths
@@ -39,7 +47,10 @@ python3 BuildApiStartupFile.py
 
 # Substitute api absolute path in import module file
 echo "[INFO] Change the path in load_gmat.py"
-sed -i 's/<TopLevelGMATFolder>/${GMAT_DIR}/g' ${GMAT_API_DIR}/load_gmat.py
+
+ESCAPED_GMAT_DIR=$(echo "$GMAT_DIR" | sed 's/[\/&]/\\&/g')
+
+sed -i "s/<TopLevelGMATFolder>/${ESCAPED_GMAT_DIR}/g" "${GMAT_API_DIR}/load_gmat.py"
 
 popd
 # Copy this file to the root

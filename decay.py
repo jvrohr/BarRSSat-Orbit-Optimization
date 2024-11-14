@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/bin/python3.10
 
 from load_gmat import *
 import os, sys, re
