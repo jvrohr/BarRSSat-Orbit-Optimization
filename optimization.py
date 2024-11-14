@@ -2,7 +2,6 @@ from typing import *
 import os, sys, json, arguments
 import numpy as np
 import scipy.optimize as opt
-from scipy.integrate import solve_ivp
 from datetime import datetime
 
 ## Argument parser
@@ -16,9 +15,9 @@ GMATPATH = os.path.join(currentDir, 'GMAT', 'R2022a')
 class Optimize:
     def __init__(self, optimizationVariables, optimizationRanges, reentryYears):
         self.earthEquatorialRadius = 6378.140 # km
-        self.mu = 3.986004e5 # km^3/s^2
-        self.referenceAltitude = 20000
-        self.referenceDensity = 2.2e-3
+        self.mu = 3.986004e14 # m^3/s^2
+        self.referenceAltitude = 20 # km
+        self.referenceDensity = 2.2e-3 # kg/m^3
 
         self.optimizationVariables = optimizationVariables
         self.optimizationRanges = optimizationRanges
@@ -144,7 +143,6 @@ class Optimize:
 
     def EverydayConstraint(self, x):
         print("[INFO] Running Contact Constraint Function")
-        self.PrintCurrentStatus(x)
         self.RunGMAT(x)
 
         for station in self.contactDict.keys():
@@ -165,21 +163,32 @@ class Optimize:
     def CalculateAirDensity(self, altitude):
         return self.referenceDensity*np.exp(-altitude/self.referenceAltitude)
 
-    def CalculateDecayDerivative(self, time, semiMajorAxis):
-        adot = -np.sqrt(semiMajorAxis)*args.DragArea*args.Cd*\
+    def CalculateDecayDerivative(self, semiMajorAxis):
+        v = np.sqrt(self.mu/(semiMajorAxis*1e3))
+        adot = -((semiMajorAxis*1e3)**2)*(v**3)*args.DragArea*args.Cd*\
             self.CalculateAirDensity(semiMajorAxis-self.earthEquatorialRadius)/\
-                (args.DryMass*np.sqrt(self.mu))
+                (args.DryMass*self.mu)
         Tday = 23*60*60 + 56*60 + 4.090538
-        return adot/Tday
+        return adot*Tday
+
+    def IntegrateDecay(self, finalTimeDays, initialSMA):
+        smaVec = [initialSMA]
+        for i in range(0, int(finalTimeDays)):
+            newval = smaVec[i] + self.CalculateDecayDerivative(smaVec[i])
+            if(newval - self.earthEquatorialRadius <= 0):
+                smaVec.append(self.earthEquatorialRadius)
+            else:
+                smaVec.append(smaVec[i] + self.CalculateDecayDerivative(smaVec[i]))
+        return smaVec
 
     def DecayConstraint(self, x):
         print("[INFO] Running Decay Constraint Function")
         minimumAltitude = 100 # km
 
-        sol = solve_ivp(self.CalculateDecayDerivative, (0, self.reentryYears*365), [x[0]], max_step=1)
-        
-        lastSMA = sol.y[0][-1]
-        print("[INFO] Last Semi-Major Axis was = " + str(lastSMA) + " km")
+        smaVec = self.IntegrateDecay(self.reentryYears*365, x[0])
+        lastSMA = smaVec[-1]
+        print("[INFO] Semi-Major Axis after one year = " + str(smaVec[365]) + " km")
+        print("[INFO] Semi-Major Axis after " + str(self.reentryYears) + " years = " + str(lastSMA) + " km")
         
         if(lastSMA <= self.earthEquatorialRadius + minimumAltitude):
             print("[INFO] Orbit decaied")
@@ -189,7 +198,9 @@ class Optimize:
             return lastSMA - (self.earthEquatorialRadius + minimumAltitude)
 
     def CombinationConstraint(self, x):
-        return self.EverydayConstraint(x) + self.DecayConstraint(x)
+        print("[INFO] Running Constraints")
+        self.PrintCurrentStatus(x)
+        return self.DecayConstraint(x) + self.EverydayConstraint(x)
 
     def Optimize(self):
         # only one constraint can be passed, as both have to be 0, we just sum their results
@@ -201,3 +212,4 @@ class Optimize:
         ## Save the simulation results dictionary into a json file
         with open('simulationResultsDictionary.json', 'w') as file:
             json.dump(self.simulationResults, file)
+        return result.x

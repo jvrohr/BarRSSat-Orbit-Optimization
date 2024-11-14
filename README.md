@@ -37,5 +37,4 @@ opt.Optimize(((6871, 6971), # SMA
 ## TO-DO
 
 - Organize files in folders and make the paths work with these changes
-- Add decay check in optimization
-- Output final orbit
+- Improve air density model
