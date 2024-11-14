@@ -33,3 +33,9 @@ opt.Optimize(((6871, 6971), # SMA
         (0, 360),           # RAAN
         (0, 360)))          # AOP
 ```
+
+## TO-DO
+
+- Organize files in folders and make the paths work with these changes
+- Add decay check in optimization
+- Output final orbit
