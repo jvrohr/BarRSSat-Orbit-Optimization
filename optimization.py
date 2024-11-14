@@ -2,6 +2,7 @@ from typing import *
 import os, sys, json, arguments
 import numpy as np
 import scipy.optimize as opt
+from scipy.integrate import solve_ivp
 from datetime import datetime
 
 ## Argument parser
@@ -13,10 +14,16 @@ currentDir = os.path.dirname(os.path.abspath(sys.argv[0]))
 GMATPATH = os.path.join(currentDir, 'GMAT', 'R2022a')
 
 class Optimize:
-    def __init__(self, optimizationVariables, optimizationRanges):
+    def __init__(self, optimizationVariables, optimizationRanges, reentryYears):
+        self.earthEquatorialRadius = 6378.140 # km
+        self.mu = 3.986004e5 # km^3/s^2
+        self.referenceAltitude = 20000
+        self.referenceDensity = 2.2e-3
+
         self.optimizationVariables = optimizationVariables
         self.optimizationRanges = optimizationRanges
         self.simulationResults = {}
+        self.reentryYears = reentryYears
     
     # Method to process the text file
     def ProcessFile(self, filePath):
@@ -98,7 +105,8 @@ class Optimize:
             cmdString = cmdString + f" --{var} {x[i]}"
         ### add fixed options
         cmdString = cmdString + f"{' '.join(sys.argv[1:])}"
-        os.system(cmdString)
+        if os.system(cmdString):
+            raise RuntimeError(f"GMAT failed to run.")
 
         ## Get contact duration dictionary
         self.contactDict = self.ProcessFile(GMATPATH + "/output/" + 
@@ -135,7 +143,7 @@ class Optimize:
         return datetime.strptime(stringDate, "%d %b %Y %H:%M:%S.%f")
 
     def EverydayConstraint(self, x):
-        print("[INFO] Running Constraint Function")
+        print("[INFO] Running Contact Constraint Function")
         self.PrintCurrentStatus(x)
         self.RunGMAT(x)
 
@@ -154,8 +162,38 @@ class Optimize:
 
         return 0
 
+    def CalculateAirDensity(self, altitude):
+        return self.referenceDensity*np.exp(-altitude/self.referenceAltitude)
+
+    def CalculateDecayDerivative(self, time, semiMajorAxis):
+        adot = -np.sqrt(semiMajorAxis)*args.DragArea*args.Cd*\
+            self.CalculateAirDensity(semiMajorAxis-self.earthEquatorialRadius)/\
+                (args.DryMass*np.sqrt(self.mu))
+        Tday = 23*60*60 + 56*60 + 4.090538
+        return adot/Tday
+
+    def DecayConstraint(self, x):
+        print("[INFO] Running Decay Constraint Function")
+        minimumAltitude = 100 # km
+
+        sol = solve_ivp(self.CalculateDecayDerivative, (0, self.reentryYears*365), [x[0]], max_step=1)
+        
+        lastSMA = sol.y[0][-1]
+        print("[INFO] Last Semi-Major Axis was = " + str(lastSMA) + " km")
+        
+        if(lastSMA <= self.earthEquatorialRadius + minimumAltitude):
+            print("[INFO] Orbit decaied")
+            return 0
+        else:
+            print("[INFO] Orbit did not decay within " + str(self.reentryYears) + " years")
+            return lastSMA - (self.earthEquatorialRadius + minimumAltitude)
+
+    def CombinationConstraint(self, x):
+        return self.EverydayConstraint(x) + self.DecayConstraint(x)
+
     def Optimize(self):
-        constraint = opt.NonlinearConstraint(self.EverydayConstraint, 0, 0)
+        # only one constraint can be passed, as both have to be 0, we just sum their results
+        constraint = opt.NonlinearConstraint(self.CombinationConstraint, 0, 0)
         result = opt.differential_evolution(self.ObjectiveFunction, bounds=self.optimizationRanges, constraints=[constraint], disp=True, polish=False, popsize=10)
         if result.success:
             print("The converged solution is: " + str(result.x))
